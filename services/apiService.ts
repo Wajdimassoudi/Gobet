@@ -103,37 +103,68 @@ export const getCurrentSession = async () => {
     return session;
 }
 
+const ADMIN_UID = 'f13be0ac-dc76-437e-a660-5ee46136b044';
+
 export const getUserProfile = async (userId: string): Promise<User> => {
     const { data, error } = await supabase
         .from('profiles')
-        .select(`
-            id,
-            username,
-            role,
-            created_at,
-            accounts ( balance )
-        `)
+        .select('id, username, role, created_at, accounts ( balance )')
         .eq('id', userId)
         .single();
+
+    if (data) {
+        const balance = Array.isArray(data.accounts) ? data.accounts[0]?.balance : data.accounts?.balance;
+        return {
+            id: data.id,
+            username: data.username,
+            role: data.role as Role,
+            createdAt: data.created_at,
+            balance: balance ?? 0,
+        };
+    }
+
+    // Self-healing: If profile is not found, check if it's the admin user needing setup.
+    if (!data && userId === ADMIN_UID) {
+        console.warn("Admin profile not found. Attempting to create it automatically...");
+        
+        // 1. Create the profile
+        const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .insert({ id: ADMIN_UID, username: 'admin', role: 'ADMIN' })
+            .select()
+            .single();
+
+        if (profileError) {
+             throw new Error(`Automatic admin setup failed: Could not create profile. Check RLS policies. Error: ${profileError.message}`);
+        }
+
+        // 2. Create the account
+        const { error: accountError } = await supabase
+            .from('accounts')
+            .insert({ user_id: ADMIN_UID, balance: 999999 });
+
+        if (accountError) {
+            // Attempt to clean up the created profile if account creation fails
+            await supabase.from('profiles').delete().eq('id', ADMIN_UID);
+            throw new Error(`Automatic admin setup failed: Could not create account. Check RLS policies. Error: ${accountError.message}`);
+        }
+        
+        console.log("Admin profile and account created successfully.");
+        return {
+            id: profileData.id,
+            username: profileData.username,
+            role: profileData.role as Role,
+            createdAt: profileData.created_at,
+            balance: 999999,
+        };
+    }
     
-    if (error) {
+    if (error && error.code !== 'PGRST116') { // PGRST116: "exact one row expected"
         console.error('Error fetching profile:', error);
-        throw new Error(`A database error occurred while fetching your profile. Please check RLS policies. Details: ${error.message}`);
+        throw new Error(`A database error occurred: ${error.message}`);
     }
     
-    if (!data) {
-        throw new Error(`Authentication was successful, but your user profile was not found in the database. Please ensure you have run the setup script to create a 'profile' and 'account' for the user ID: ${userId}`);
-    }
-
-    const balance = Array.isArray(data.accounts) ? data.accounts[0]?.balance : data.accounts?.balance;
-
-    return {
-        id: data.id,
-        username: data.username,
-        role: data.role as Role,
-        createdAt: data.created_at,
-        balance: balance ?? 0,
-    };
+    throw new Error(`Authentication successful, but user profile not found for ID: ${userId}.`);
 };
 
 export const getAllUsers = async (): Promise<User[]> => {
