@@ -1,0 +1,5 @@
+{
+  "name": "GoBet Virtual Betting",
+  "description": "A virtual online betting platform featuring sports, casino, and live games. Users can place bets using the virtual currency 'TN'. Account and fund management are handled exclusively by an administrator.",
+  "requestFramePermissions": []
+}
