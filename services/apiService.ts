@@ -4,7 +4,7 @@
 import { supabase } from '../lib/supabaseClient';
 import { Game, SportEvent, User, Role } from '../types';
 import { SLOT_GAMES_API_HOST, BETFAIR_API_HOST } from '../constants';
-import { AuthChangeEvent, Session } from '@supabase/supabase-js';
+import { AuthChangeEvent, Session, User as SupabaseUser } from '@supabase/supabase-js';
 
 // NOTE: RapidAPI calls have been disabled and replaced with mock data.
 // This allows the application to function without needing a VITE_RAPID_API_KEY.
@@ -83,10 +83,6 @@ export const getLiveTvUrl = async (eventId: string): Promise<string> => {
 // --- Supabase Auth & User Management ---
 
 export const signIn = async (email: string, password: string) => {
-    // IMPORTANT: This function expects an email.
-    // The Login form constructs a "dummy" email like 'username@gobet.local'.
-    // For the 'admin' user to log in, you MUST have created a user in your
-    // Supabase Authentication settings with the EXACT email: 'admin@gobet.local'
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
 };
@@ -104,13 +100,11 @@ export const getCurrentSession = async () => {
     return session;
 }
 
-const ADMIN_UID = 'f13be0ac-dc76-437e-a660-5ee46136b044';
-
-export const getUserProfile = async (userId: string): Promise<User> => {
+export const getUserProfile = async (user: SupabaseUser): Promise<User> => {
     const { data, error } = await supabase
         .from('profiles')
         .select('id, username, role, created_at, accounts ( balance )')
-        .eq('id', userId)
+        .eq('id', user.id)
         .single();
 
     if (data) {
@@ -125,13 +119,13 @@ export const getUserProfile = async (userId: string): Promise<User> => {
     }
 
     // Self-healing: If profile is not found, check if it's the admin user needing setup.
-    if (!data && userId === ADMIN_UID) {
+    if (!data && user.email === 'admin@gobet.local') {
         console.warn("Admin profile not found. Attempting to create it automatically...");
         
         // 1. Create the profile
         const { data: profileData, error: profileError } = await supabase
             .from('profiles')
-            .insert({ id: ADMIN_UID, username: 'admin', role: 'ADMIN' })
+            .insert({ id: user.id, username: 'admin', role: 'ADMIN' })
             .select()
             .single();
 
@@ -142,11 +136,11 @@ export const getUserProfile = async (userId: string): Promise<User> => {
         // 2. Create the account
         const { error: accountError } = await supabase
             .from('accounts')
-            .insert({ user_id: ADMIN_UID, balance: 999999 });
+            .insert({ user_id: user.id, balance: 999999 });
 
         if (accountError) {
             // Attempt to clean up the created profile if account creation fails
-            await supabase.from('profiles').delete().eq('id', ADMIN_UID);
+            await supabase.from('profiles').delete().eq('id', user.id);
             throw new Error(`Automatic admin setup failed: Could not create account. Check RLS policies. Error: ${accountError.message}`);
         }
         
@@ -165,7 +159,7 @@ export const getUserProfile = async (userId: string): Promise<User> => {
         throw new Error(`A database error occurred: ${error.message}`);
     }
     
-    throw new Error(`Authentication successful, but user profile not found for ID: ${userId}.`);
+    throw new Error(`Authentication successful, but user profile not found for ID: ${user.id}.`);
 };
 
 export const getAllUsers = async (): Promise<User[]> => {

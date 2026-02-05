@@ -1,14 +1,13 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { User, Role } from './types';
-import Login from './components/ui/Login';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import AdminPanel from './components/AdminPanel';
 import CasinoLobby from './components/CasinoLobby';
 import Sportsbook from './components/Sportsbook';
 import * as api from './services/apiService';
-import { Session } from '@supabase/supabase-js';
+import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import Spinner from './components/ui/Spinner';
 
 export const AuthContext = React.createContext<{
@@ -29,23 +28,28 @@ const App: React.FC = () => {
     setAuthError('');
     if (session?.user) {
       try {
-        const profile = await api.getUserProfile(session.user.id);
+        const profile = await api.getUserProfile(session.user);
         setCurrentUser(profile);
-        if (profile.role === Role.ADMIN) {
-          setActiveView('Admin');
-        } else {
-          setActiveView('Sports');
+        if (profile.role === Role.ADMIN && activeView !== 'Admin') {
+            // Keep current view unless it's not set
+        } else if (profile.role === Role.ADMIN) {
+            setActiveView('Admin');
         }
+
       } catch (error: any) {
         console.error("Critical Error: Failed to load user profile after login.", error);
         setAuthError(error.message);
-        await api.signOut(); // Log out, app is in an unusable state
+        await api.signOut();
         setCurrentUser(null);
       } finally {
         setLoading(false);
       }
     } else {
       setCurrentUser(null);
+      // If logged out and on admin page, redirect to sports
+      if (activeView === 'Admin') {
+          setActiveView('Sports');
+      }
       setLoading(false);
     }
   };
@@ -87,33 +91,35 @@ const App: React.FC = () => {
     updateBalance,
   }), [currentUser, session]);
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center"><Spinner /></div>;
+  const renderContent = () => {
+    if (activeView === 'Admin') {
+        return currentUser?.role === Role.ADMIN ? <AdminPanel /> : <p>Access Denied</p>;
+    }
+    if (activeView === 'Sports') {
+        return <Sportsbook />;
+    }
+    if (['Casino', 'Slots', 'Live Casino'].includes(activeView)) {
+        return <CasinoLobby gameType={activeView} />;
+    }
+    return <Sportsbook />; // Default view
   }
 
   return (
     <AuthContext.Provider value={authContextValue}>
       <div className="min-h-screen bg-brand-background text-brand-text-primary">
-        {!currentUser ? (
-          <Login authError={authError} />
-        ) : (
-          <div className="flex flex-col md:flex-row">
-            <Sidebar activeView={activeView} setActiveView={setActiveView} />
-            <div className="flex-1 flex flex-col">
-              <Header />
-              <main className="p-4 sm:p-6 lg:p-8 flex-1 overflow-y-auto">
-                {currentUser.role === Role.ADMIN ? <AdminPanel /> : (
-                  <>
-                    {activeView === 'Sports' && <Sportsbook />}
-                    {(activeView === 'Casino' || activeView === 'Slots' || activeView === 'Live Casino') && (
-                      <CasinoLobby gameType={activeView} />
-                    )}
-                  </>
-                )}
-              </main>
-            </div>
+        <div className="flex flex-col md:flex-row">
+          <Sidebar activeView={activeView} setActiveView={setActiveView} />
+          <div className="flex-1 flex flex-col">
+            <Header />
+            <main className="p-4 sm:p-6 lg:p-8 flex-1 overflow-y-auto">
+              {loading ? (
+                <div className="flex items-center justify-center h-full"><Spinner /></div>
+              ) : (
+                renderContent()
+              )}
+            </main>
           </div>
-        )}
+        </div>
       </div>
     </AuthContext.Provider>
   );

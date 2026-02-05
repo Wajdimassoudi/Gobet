@@ -9,15 +9,12 @@ interface SidebarProps {
 }
 
 const UserNavItems = ['Sports', 'Casino', 'Slots', 'Live Casino'];
-const AdminNavItems = ['Admin'];
 
 const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView }) => {
   const auth = useContext(AuthContext);
   const [isOpen, setIsOpen] = useState(false);
 
-  if (!auth || !auth.user) return null;
-
-  const navItems = auth.user.role === Role.ADMIN ? AdminNavItems : UserNavItems;
+  const navItems = auth?.user?.role === Role.ADMIN ? ['Admin', ...UserNavItems] : UserNavItems;
 
   const NavLinks = () => (
     <nav>

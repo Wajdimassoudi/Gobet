@@ -133,13 +133,16 @@ const Sportsbook: React.FC = () => {
                         value={stake}
                         onChange={(e) => setStake(Number(e.target.value))}
                         className="w-full px-3 py-2 bg-brand-surface border border-gray-600 rounded-md text-brand-text-primary"
+                        disabled={!auth?.user}
                     />
                 </div>
                 <div className="flex justify-between text-lg font-bold">
                     <span>Potential Winnings:</span>
                     <span className="text-brand-primary">{(stake * (betSlip[0]?.odds || 0)).toFixed(2)} TN</span>
                 </div>
-                <Button onClick={placeBet} className="w-full mt-4">Place Bet</Button>
+                <Button onClick={placeBet} className="w-full mt-4" disabled={!auth?.user}>
+                  {auth?.user ? 'Place Bet' : 'Login to Place Bet'}
+                </Button>
             </div>
           )}
         </Card>
