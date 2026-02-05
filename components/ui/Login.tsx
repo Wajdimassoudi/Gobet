@@ -1,9 +1,9 @@
 
 import React, { useState } from 'react';
-import * as api from '../services/apiService';
-import Input from './ui/Input';
-import Button from './ui/Button';
-import Card from './ui/Card';
+import * as api from '../../services/apiService';
+import Input from './Input';
+import Button from './Button';
+import Card from './Card';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
