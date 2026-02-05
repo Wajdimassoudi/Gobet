@@ -78,3 +78,11 @@ create policy "Users can manage their own bets." on bets
 
 create policy "Admins can view all bets." on bets
   for select using ( (select role from profiles where id = auth.uid()) = 'ADMIN' );
+  
+-- After creating your admin user in Supabase Authentication,
+-- get the user's UID and replace 'YOUR_ADMIN_AUTH_ID' below.
+INSERT INTO profiles (id, username, role)
+VALUES ('YOUR_ADMIN_AUTH_ID', 'admin', 'ADMIN');
+
+INSERT INTO accounts (user_id, balance)
+VALUES ('YOUR_ADMIN_AUTH_ID', 999999);

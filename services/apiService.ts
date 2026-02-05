@@ -1,12 +1,12 @@
 // Fix for 'import.meta.env' TypeScript error
-/// <reference types="vite/client" />
 
 import { supabase } from '../lib/supabaseClient';
 import { Game, SportEvent, User, Role } from '../types';
 import { SLOT_GAMES_API_HOST, BETFAIR_API_HOST } from '../constants';
 import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
-const RAPID_API_KEY = import.meta.env.VITE_RAPID_API_KEY;
+// FIX: The reference to "vite/client" types was removed as it was not found. Using `(import.meta as any)` to bypass the type check.
+const RAPID_API_KEY = (import.meta as any).env.VITE_RAPID_API_KEY;
 
 const rapidApiFetch = async (host: string, endpoint: string) => {
     if (!RAPID_API_KEY) {
