@@ -103,7 +103,7 @@ export const getCurrentSession = async () => {
     return session;
 }
 
-export const getUserProfile = async (userId: string): Promise<User | null> => {
+export const getUserProfile = async (userId: string): Promise<User> => {
     const { data, error } = await supabase
         .from('profiles')
         .select(`
@@ -118,16 +118,19 @@ export const getUserProfile = async (userId: string): Promise<User | null> => {
     
     if (error) {
         console.error('Error fetching profile:', error);
-        return null;
+        throw new Error(`A database error occurred while fetching your profile. Please check RLS policies. Details: ${error.message}`);
     }
     
-    // The query returns an array for accounts, even with a single relation.
+    if (!data) {
+        throw new Error(`Authentication was successful, but your user profile was not found in the database. Please ensure you have run the setup script to create a 'profile' and 'account' for the user ID: ${userId}`);
+    }
+
     const balance = Array.isArray(data.accounts) ? data.accounts[0]?.balance : data.accounts?.balance;
 
     return {
         id: data.id,
         username: data.username,
-        role: data.role,
+        role: data.role as Role,
         createdAt: data.created_at,
         balance: balance ?? 0,
     };
@@ -199,7 +202,12 @@ export const updateUserBalance = async (userId: string, amount: number, transact
     const { data: accountData, error: fetchError } = await supabase.from('accounts').select('id, balance').eq('user_id', userId).single();
     if(fetchError) throw fetchError;
 
-    const newBalance = accountData.balance + amount;
+    let newBalance = accountData.balance;
+    if (transactionType === 'deposit') {
+      newBalance += amount;
+    } else {
+      newBalance -= amount;
+    }
     
     const { data: updatedAccount, error: updateError } = await supabase.from('accounts').update({ balance: newBalance }).eq('user_id', userId).select('balance').single();
     if(updateError) throw updateError;

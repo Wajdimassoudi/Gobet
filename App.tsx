@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { User, Role } from './types';
 import Login from './components/ui/Login';
@@ -23,49 +22,55 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeView, setActiveView] = useState('Sports');
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState('');
 
-  useEffect(() => {
-    const { data: { subscription } } = api.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session?.user) {
-        api.getUserProfile(session.user.id)
-          .then(profile => {
-            setCurrentUser(profile);
-             if (profile?.role === Role.ADMIN) {
-                setActiveView('Admin');
-             } else {
-                setActiveView('Sports');
-             }
-          })
-          .finally(() => setLoading(false));
-      } else {
+  const handleSession = async (session: Session | null) => {
+    setAuthError('');
+    if (session?.user) {
+      try {
+        const profile = await api.getUserProfile(session.user.id);
+        setCurrentUser(profile);
+        if (profile.role === Role.ADMIN) {
+          setActiveView('Admin');
+        } else {
+          setActiveView('Sports');
+        }
+      } catch (error: any) {
+        console.error("Critical Error: Failed to load user profile after login.", error);
+        setAuthError(error.message);
+        await api.signOut(); // Log out, app is in an unusable state
         setCurrentUser(null);
+      } finally {
         setLoading(false);
       }
-    });
+    } else {
+      setCurrentUser(null);
+      setLoading(false);
+    }
+  };
 
-    // Check initial session
-     const checkSession = async () => {
-        const currentSession = await api.getCurrentSession();
-        setSession(currentSession);
-        if (currentSession?.user) {
-            const profile = await api.getUserProfile(currentSession.user.id);
-            setCurrentUser(profile);
-            if (profile?.role === Role.ADMIN) {
-                setActiveView('Admin');
-            }
-        }
-        setLoading(false);
+  useEffect(() => {
+    const checkInitialSession = async () => {
+      setLoading(true);
+      const currentSession = await api.getCurrentSession();
+      setSession(currentSession);
+      await handleSession(currentSession);
     };
-    checkSession();
+    checkInitialSession();
+
+    const { data: { subscription } } = api.onAuthStateChange((_event, session) => {
+      setSession(session);
+      handleSession(session);
+    });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const logout = () => {
-    api.signOut();
+  const logout = async () => {
+    await api.signOut();
     setCurrentUser(null);
     setSession(null);
+    setAuthError('');
   };
 
   const updateBalance = (userId: string, newBalance: number) => {
@@ -81,37 +86,29 @@ const App: React.FC = () => {
     updateBalance,
   }), [currentUser, session]);
 
-  const renderContent = () => {
-    if (loading) {
-      return <div className="min-h-screen flex items-center justify-center"><Spinner /></div>;
-    }
-    if (!currentUser) return <Login />;
-    if (currentUser.role === Role.ADMIN) return <AdminPanel />;
-    
-    switch (activeView) {
-      case 'Sports':
-        return <Sportsbook />;
-      case 'Casino':
-      case 'Slots':
-      case 'Live Casino':
-        return <CasinoLobby gameType={activeView} />;
-      default:
-        return <Sportsbook />;
-    }
-  };
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center"><Spinner /></div>;
+  }
 
   return (
     <AuthContext.Provider value={authContextValue}>
       <div className="min-h-screen bg-brand-background text-brand-text-primary">
-        {!currentUser && !loading ? (
-          <Login />
+        {!currentUser ? (
+          <Login authError={authError} />
         ) : (
           <div className="flex flex-col md:flex-row">
-            {currentUser && <Sidebar activeView={activeView} setActiveView={setActiveView} />}
+            <Sidebar activeView={activeView} setActiveView={setActiveView} />
             <div className="flex-1 flex flex-col">
-              {currentUser && <Header />}
+              <Header />
               <main className="p-4 sm:p-6 lg:p-8 flex-1 overflow-y-auto">
-                {renderContent()}
+                {currentUser.role === Role.ADMIN ? <AdminPanel /> : (
+                  <>
+                    {activeView === 'Sports' && <Sportsbook />}
+                    {(activeView === 'Casino' || activeView === 'Slots' || activeView === 'Live Casino') && (
+                      <CasinoLobby gameType={activeView} />
+                    )}
+                  </>
+                )}
               </main>
             </div>
           </div>
