@@ -5,9 +5,10 @@ import { Game, SportEvent, User, Role } from '../types';
 import { SLOT_GAMES_API_HOST, BETFAIR_API_HOST } from '../constants';
 import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
-// FIX: The reference to "vite/client" types was removed as it was not found. Using `(import.meta as any)` to bypass the type check.
-const RAPID_API_KEY = (import.meta as any).env.VITE_RAPID_API_KEY;
-
+// NOTE: RapidAPI calls have been disabled and replaced with mock data.
+// This allows the application to function without needing a VITE_RAPID_API_KEY.
+// const RAPID_API_KEY = (import.meta as any).env.VITE_RAPID_API_KEY;
+/*
 const rapidApiFetch = async (host: string, endpoint: string) => {
     if (!RAPID_API_KEY) {
         throw new Error("RapidAPI key is not configured in environment variables.");
@@ -24,31 +25,29 @@ const rapidApiFetch = async (host: string, endpoint: string) => {
     }
     return response.json();
 };
+*/
 
 // --- Game & Sport APIs ---
 
 export const getGames = async (category: string): Promise<Game[]> => {
-    // This is a hypothetical mapping. You MUST adjust it based on the actual API response structure.
-    const data = await rapidApiFetch(SLOT_GAMES_API_HOST, '/');
-    const mappedGames: Game[] = data.map((game: any) => ({
-        id: game.id,
-        name: game.title,
-        provider: game.provider,
-        imageUrl: game.image,
-        category: game.category // Assuming the API provides a category
-    }));
+    console.warn("Game data is currently mocked. A valid RapidAPI key is required for live data.");
+    const allGames: Game[] = [
+        { id: 'slot1', name: 'Book of Ra', provider: 'Novomatic', category: 'Slots', imageUrl: 'https://img.gs-games.com/c/300/300/a/media/export/g/book-of-ra-deluxe-10-win-ways-slot-game-logo.png' },
+        { id: 'slot2', name: 'Starburst', provider: 'NetEnt', category: 'Slots', imageUrl: 'https://www.netent.com/uploads/2021/01/Starburst-Extreme-Casino-Game-by-NetEnt.jpg' },
+        { id: 'slot3', name: 'Gonzo\'s Quest', provider: 'NetEnt', category: 'Slots', imageUrl: 'https://www.netent.com/uploads/2020/12/ Gonzos-Quest-Casino-Game-by-NetEnt.jpg' },
+        { id: 'live1', name: 'Live Blackjack', provider: 'Evolution', category: 'Live Casino', imageUrl: 'https://www.evolution.com/wp-content/uploads/2021/11/live-blackjack.jpg' },
+        { id: 'live2', name: 'Lightning Roulette', provider: 'Evolution', category: 'Live Casino', imageUrl: 'https://www.evolution.com/wp-content/uploads/2021/11/lightning-roulette.jpg' },
+        { id: 'casino1', name: 'European Roulette', provider: 'Playtech', category: 'Casino', imageUrl: 'https://images.igaming.org/images/Content/casino/how-to-play-roulette-header.jpg' },
+        { id: 'casino2', name: 'Classic Baccarat', provider: 'Pragmatic Play', category: 'Casino', imageUrl: 'https://www.pragmaticplay.com/wp-content/uploads/2021/10/Baccarat.png' }
+    ];
 
-    if (category === 'All' || category === 'Casino') {
-        return mappedGames;
+    if (category === 'All' || !['Slots', 'Live Casino', 'Casino'].includes(category)) {
+        return allGames.filter(g => g.category === 'Slots' || g.category === 'Casino' || g.category === 'Live Casino');
     }
-    return mappedGames.filter(g => g.category === category);
+    return allGames.filter(g => g.category === category);
 };
 
 export const getSportsEvents = async (): Promise<SportEvent[]> => {
-    // This is a hypothetical mapping. You MUST adjust it based on the actual API response structure.
-    // The Betfair API is complex; this is a simplified example.
-    // We are mocking this one as the real API is very complex to map without documentation.
-    console.warn("Sports events are currently mocked. Real API integration is required.");
     return [
         {
             id: 'evt-live-1',
@@ -58,20 +57,35 @@ export const getSportsEvents = async (): Promise<SportEvent[]> => {
             live: true,
             markets: [
                 { name: 'Match Winner', odds: [{ name: 'Team A', value: 2.1 }, { name: 'Draw', value: 3.0 }, { name: 'Team B', value: 2.9 }] },
+                { name: 'Both Teams to Score', odds: [{ name: 'Yes', value: 1.8 }, { name: 'No', value: 1.95 }] },
+            ]
+        },
+        {
+            id: 'evt-pre-1',
+            name: 'Upcoming Tennis Match',
+            participants: ['Player 1', 'Player 2'],
+            startTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+            live: false,
+            markets: [
+                { name: 'Match Winner', odds: [{ name: 'Player 1', value: 1.5 }, { name: 'Player 2', value: 2.5 }] },
             ]
         }
     ];
 };
 
 export const getLiveTvUrl = async (eventId: string): Promise<string> => {
-    const data = await rapidApiFetch(BETFAIR_API_HOST, `/api/v3/livetv?eventid=${eventId}`);
-    return data?.Url || "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"; // Fallback URL
+    console.warn("Live TV URL is using a fallback. A valid RapidAPI key is required for live data.");
+    return "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"; // Return fallback URL directly
 };
 
 
 // --- Supabase Auth & User Management ---
 
 export const signIn = async (email: string, password: string) => {
+    // IMPORTANT: This function expects an email.
+    // The Login form constructs a "dummy" email like 'username@gobet.local'.
+    // For the 'admin' user to log in, you MUST have created a user in your
+    // Supabase Authentication settings with the EXACT email: 'admin@gobet.local'
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
 };
@@ -107,12 +121,15 @@ export const getUserProfile = async (userId: string): Promise<User | null> => {
         return null;
     }
     
+    // The query returns an array for accounts, even with a single relation.
+    const balance = Array.isArray(data.accounts) ? data.accounts[0]?.balance : data.accounts?.balance;
+
     return {
         id: data.id,
         username: data.username,
         role: data.role,
         createdAt: data.created_at,
-        balance: data.accounts[0]?.balance ?? 0,
+        balance: balance ?? 0,
     };
 };
 
@@ -130,13 +147,16 @@ export const getAllUsers = async (): Promise<User[]> => {
 
     if (error) throw error;
 
-    return data.map(profile => ({
-        id: profile.id,
-        username: profile.username,
-        role: profile.role as Role,
-        createdAt: profile.created_at,
-        balance: profile.accounts[0]?.balance ?? 0,
-    }));
+    return data.map(profile => {
+        const balance = Array.isArray(profile.accounts) ? profile.accounts[0]?.balance : profile.accounts?.balance;
+        return {
+            id: profile.id,
+            username: profile.username,
+            role: profile.role as Role,
+            createdAt: profile.created_at,
+            balance: balance ?? 0,
+        };
+    });
 }
 
 export const adminCreateUser = async (username: string, password: string): Promise<void> => {

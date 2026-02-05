@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import * as api from '../../services/apiService';
 import Input from './Input';
@@ -17,8 +16,8 @@ const Login: React.FC = () => {
     setLoading(true);
     try {
       // NOTE: Supabase uses email for login. We use a dummy email format.
-      // In a real app, you would collect emails or use usernames with a custom setup.
-      const dummyEmail = `${email}@gobet.local`;
+      // The username input is converted to 'username@gobet.local'.
+      const dummyEmail = `${email.toLowerCase()}@gobet.local`;
       await api.signIn(dummyEmail, password);
       // Login successful, App component will handle redirect via auth state change
     } catch (err: any) {
@@ -57,6 +56,9 @@ const Login: React.FC = () => {
             autoComplete="current-password"
             placeholder="Enter your password"
           />
+           <p className="text-xs text-brand-text-secondary text-center px-2 !mt-4">
+              For admin, use username <code className="bg-brand-surface p-1 rounded font-mono">admin</code>. The user in Supabase must have the email <code className="bg-brand-surface p-1 rounded font-mono">admin@gobet.local</code>.
+          </p>
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? 'Signing In...' : 'Sign In'}
           </Button>
