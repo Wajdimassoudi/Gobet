@@ -1,18 +1,13 @@
 
-// Fix for 'import.meta.env' TypeScript error
-
 import { supabase } from '../lib/supabaseClient';
-import { Game, SportEvent, User, Role } from '../types';
-import { SLOT_GAMES_API_HOST, BETFAIR_API_HOST } from '../constants';
+import { Game, SportEvent, User, Role, Market } from '../types';
 import { AuthChangeEvent, Session, User as SupabaseUser } from '@supabase/supabase-js';
+import { RAPID_API_KEY, RAPID_API_HOST_BETFAIR } from '../config';
 
-// NOTE: RapidAPI calls have been disabled and replaced with mock data.
-// This allows the application to function without needing a VITE_RAPID_API_KEY.
-// const RAPID_API_KEY = (import.meta as any).env.VITE_RAPID_API_KEY;
-/*
 const rapidApiFetch = async (host: string, endpoint: string) => {
     if (!RAPID_API_KEY) {
-        throw new Error("RapidAPI key is not configured in environment variables.");
+        console.error("RapidAPI key is not configured.");
+        throw new Error("API key is missing.");
     }
     const response = await fetch(`https://${host}${endpoint}`, {
         method: 'GET',
@@ -22,16 +17,17 @@ const rapidApiFetch = async (host: string, endpoint: string) => {
         },
     });
     if (!response.ok) {
-        throw new Error(`API call failed: ${response.statusText}`);
+        const errorBody = await response.text();
+        console.error(`API call failed for ${host}${endpoint}: ${response.statusText}`, errorBody);
+        throw new Error(`Failed to fetch data from the API. Status: ${response.status}`);
     }
     return response.json();
 };
-*/
 
 // --- Game & Sport APIs ---
 
 export const getGames = async (category: string): Promise<Game[]> => {
-    console.warn("Game data is currently mocked. A valid RapidAPI key is required for live data.");
+    console.warn("Game data is currently mocked.");
     const allGames: Game[] = [
         { id: 'slot1', name: 'Book of Ra', provider: 'Novomatic', category: 'Slots', imageUrl: 'https://img.gs-games.com/c/300/300/a/media/export/g/book-of-ra-deluxe-10-win-ways-slot-game-logo.png' },
         { id: 'slot2', name: 'Starburst', provider: 'NetEnt', category: 'Slots', imageUrl: 'https://www.netent.com/uploads/2021/01/Starburst-Extreme-Casino-Game-by-NetEnt.jpg' },
@@ -42,41 +38,46 @@ export const getGames = async (category: string): Promise<Game[]> => {
         { id: 'casino2', name: 'Classic Baccarat', provider: 'Pragmatic Play', category: 'Casino', imageUrl: 'https://www.pragmaticplay.com/wp-content/uploads/2021/10/Baccarat.png' }
     ];
 
-    if (category === 'All' || !['Slots', 'Live Casino', 'Casino'].includes(category)) {
-        return allGames.filter(g => g.category === 'Slots' || g.category === 'Casino' || g.category === 'Live Casino');
-    }
-    return allGames.filter(g => g.category === category);
+    return allGames.filter(g => category === 'All' || g.category === category);
 };
 
 export const getSportsEvents = async (): Promise<SportEvent[]> => {
-    return [
-        {
-            id: 'evt-live-1',
-            name: 'Live Football',
-            participants: ['Team A', 'Team B'],
-            startTime: new Date().toISOString(),
-            live: true,
-            markets: [
-                { name: 'Match Winner', odds: [{ name: 'Team A', value: 2.1 }, { name: 'Draw', value: 3.0 }, { name: 'Team B', value: 2.9 }] },
-                { name: 'Both Teams to Score', odds: [{ name: 'Yes', value: 1.8 }, { name: 'No', value: 1.95 }] },
-            ]
-        },
-        {
-            id: 'evt-pre-1',
-            name: 'Upcoming Tennis Match',
-            participants: ['Player 1', 'Player 2'],
-            startTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-            live: false,
-            markets: [
-                { name: 'Match Winner', odds: [{ name: 'Player 1', value: 1.5 }, { name: 'Player 2', value: 2.5 }] },
-            ]
-        }
-    ];
+    // NOTE: The user provided an API for a specific event's TV stream. To populate the list,
+    // we are assuming a standard endpoint '/api/v3/events' exists on the same host.
+    const response = await rapidApiFetch(RAPID_API_HOST_BETFAIR, '/api/v3/events?sport=soccer');
+
+    // This is an assumed mapping based on a typical sports API structure.
+    // It may need to be adjusted based on the actual response from the API.
+    if (!response || !Array.isArray(response.events)) {
+        console.warn("API response for sports events is not in the expected format.", response);
+        return []; // Return empty array if data is malformed
+    }
+    
+    return response.events.map((event: any): SportEvent => ({
+        id: event.id,
+        name: event.name || `${event.participants?.[0]} vs ${event.participants?.[1]}`,
+        participants: event.participants || ['Team 1', 'Team 2'],
+        startTime: event.startTime,
+        live: event.live || event.status === 'live',
+        markets: (event.markets || []).map((market: any): Market => ({
+            name: market.name,
+            odds: (market.odds || []).map((outcome: any) => ({
+                name: outcome.name,
+                value: outcome.value,
+            })),
+        })),
+    }));
 };
 
 export const getLiveTvUrl = async (eventId: string): Promise<string> => {
-    console.warn("Live TV URL is using a fallback. A valid RapidAPI key is required for live data.");
-    return "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"; // Return fallback URL directly
+    const response = await rapidApiFetch(RAPID_API_HOST_BETFAIR, `/api/v3/livetv?eventid=${eventId}`);
+    // Assuming the response has a "url" property containing the stream link.
+    if (response && response.url) {
+        return response.url;
+    }
+    // Fallback if the API doesn't provide a URL
+    console.warn(`No live TV URL found for event ${eventId}. Using fallback.`);
+    return "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
 };
 
 
@@ -122,7 +123,6 @@ export const getUserProfile = async (user: SupabaseUser): Promise<User> => {
     if (!data && user.email === 'admin@gobet.local') {
         console.warn("Admin profile not found. Attempting to create it automatically...");
         
-        // 1. Create the profile
         const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .insert({ id: user.id, username: 'admin', role: 'ADMIN' })
@@ -133,13 +133,11 @@ export const getUserProfile = async (user: SupabaseUser): Promise<User> => {
              throw new Error(`Automatic admin setup failed: Could not create profile. Check RLS policies. Error: ${profileError.message}`);
         }
 
-        // 2. Create the account
         const { error: accountError } = await supabase
             .from('accounts')
             .insert({ user_id: user.id, balance: 999999 });
 
         if (accountError) {
-            // Attempt to clean up the created profile if account creation fails
             await supabase.from('profiles').delete().eq('id', user.id);
             throw new Error(`Automatic admin setup failed: Could not create account. Check RLS policies. Error: ${accountError.message}`);
         }
@@ -154,7 +152,7 @@ export const getUserProfile = async (user: SupabaseUser): Promise<User> => {
         };
     }
     
-    if (error && error.code !== 'PGRST116') { // PGRST116: "exact one row expected"
+    if (error && error.code !== 'PGRST116') {
         console.error('Error fetching profile:', error);
         throw new Error(`A database error occurred: ${error.message}`);
     }
@@ -165,86 +163,52 @@ export const getUserProfile = async (user: SupabaseUser): Promise<User> => {
 export const getAllUsers = async (): Promise<User[]> => {
     const { data, error } = await supabase
         .from('profiles')
-        .select(`
-            id,
-            username,
-            role,
-            created_at,
-            accounts ( balance )
-        `)
+        .select(`id, username, role, created_at, accounts ( balance )`)
         .eq('role', 'USER');
 
     if (error) throw error;
 
-    return data.map(profile => {
-        const balance = Array.isArray(profile.accounts) ? profile.accounts[0]?.balance : profile.accounts?.balance;
-        return {
-            id: profile.id,
-            username: profile.username,
-            role: profile.role as Role,
-            createdAt: profile.created_at,
-            balance: balance ?? 0,
-        };
-    });
+    return data.map(profile => ({
+        id: profile.id,
+        username: profile.username,
+        role: profile.role as Role,
+        createdAt: profile.created_at,
+        balance: (Array.isArray(profile.accounts) ? profile.accounts[0]?.balance : profile.accounts?.balance) ?? 0,
+    }));
 }
 
 export const adminCreateUser = async (username: string, password: string): Promise<void> => {
-    // SECURITY NOTE: This flow logs the admin out. This is a client-side limitation.
-    // A production app should use a Supabase Edge Function for user creation.
-    // Also, disable "Confirm email" in Supabase Auth settings for this to work.
-
     const email = `${username.toLowerCase()}@gobet.local`;
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-    });
+    const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
 
     if (authError) throw authError;
     if (!authData.user) throw new Error('User creation failed in Auth.');
 
-    // Insert into profiles
-    const { error: profileError } = await supabase.from('profiles').insert({
-        id: authData.user.id,
-        username,
-        role: Role.USER,
-    });
+    const { error: profileError } = await supabase.from('profiles').insert({ id: authData.user.id, username, role: Role.USER });
     if (profileError) throw profileError;
 
-    // Insert into accounts
-    const { error: accountError } = await supabase.from('accounts').insert({
-        user_id: authData.user.id,
-        balance: 0,
-    });
+    const { error: accountError } = await supabase.from('accounts').insert({ user_id: authData.user.id, balance: 0 });
     if (accountError) throw accountError;
     
-    // Sign out the new user immediately so the admin is forced to log back in.
     await supabase.auth.signOut();
 };
 
 export const updateUserBalance = async (userId: string, amount: number, transactionType: 'deposit' | 'withdraw'): Promise<number> => {
-    // For production, this should be an atomic RPC function in Supabase.
-    // Doing it in two steps here for simplicity.
-    
     const { data: accountData, error: fetchError } = await supabase.from('accounts').select('id, balance').eq('user_id', userId).single();
     if(fetchError) throw fetchError;
 
-    let newBalance = accountData.balance;
-    if (transactionType === 'deposit') {
-      newBalance += amount;
-    } else {
-      newBalance -= amount;
-    }
+    let newBalance = transactionType === 'deposit' ? accountData.balance + amount : accountData.balance - amount;
     
     const { data: updatedAccount, error: updateError } = await supabase.from('accounts').update({ balance: newBalance }).eq('user_id', userId).select('balance').single();
     if(updateError) throw updateError;
     
-    // Log transaction
+    const { data: { user } } = await supabase.auth.getUser();
     const { error: transactionError } = await supabase.from('transactions').insert({
         account_id: accountData.id,
         user_id: userId,
         type: transactionType,
         amount: Math.abs(amount),
-        admin_id: (await supabase.auth.getUser()).data.user?.id
+        admin_id: user?.id
     });
     if(transactionError) console.error("Failed to log transaction:", transactionError);
 

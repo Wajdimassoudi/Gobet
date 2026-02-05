@@ -17,6 +17,7 @@ interface Bet {
 const Sportsbook: React.FC = () => {
   const [events, setEvents] = useState<SportEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [betSlip, setBetSlip] = useState<Bet[]>([]);
   const [stake, setStake] = useState<number>(10);
   const [liveStreamUrl, setLiveStreamUrl] = useState<string | null>(null);
@@ -25,32 +26,33 @@ const Sportsbook: React.FC = () => {
   useEffect(() => {
     const fetchEvents = async () => {
       setLoading(true);
-      const fetchedEvents = await getSportsEvents();
-      setEvents(fetchedEvents);
-      
-      const liveEvent = fetchedEvents.find(e => e.live);
-      if (liveEvent) {
-          const url = await getLiveTvUrl(liveEvent.id);
-          setLiveStreamUrl(url);
+      setError(null);
+      try {
+        const fetchedEvents = await getSportsEvents();
+        setEvents(fetchedEvents);
+        
+        const liveEvent = fetchedEvents.find(e => e.live);
+        if (liveEvent) {
+            const url = await getLiveTvUrl(liveEvent.id);
+            setLiveStreamUrl(url);
+        }
+      } catch (err) {
+        setError("Failed to load sports events. The API might be down or your key may be invalid. Please try again later.");
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     fetchEvents();
   }, []);
   
   const addToBetSlip = (event: SportEvent, market: Market, outcome: { name: string; value: number }) => {
-      const newBet: Bet = {
-          eventId: event.id,
-          marketName: market.name,
-          outcomeName: outcome.name,
-          odds: outcome.value
-      };
-      // For simplicity, allow one bet at a time.
+      const newBet: Bet = { eventId: event.id, marketName: market.name, outcomeName: outcome.name, odds: outcome.value };
       setBetSlip([newBet]);
   }
 
   const placeBet = () => {
-      if(!auth || !auth.user || betSlip.length === 0 || stake <= 0) return;
+      if(!auth?.user || betSlip.length === 0 || stake <= 0) return;
       if(auth.user.balance < stake) {
           alert('Insufficient balance.');
           return;
@@ -64,6 +66,13 @@ const Sportsbook: React.FC = () => {
   }
 
   if (loading) return <div className="flex justify-center items-center h-64"><Spinner /></div>;
+
+  if (error) return (
+      <Card className="border border-brand-danger/50 text-center">
+        <h3 className="text-xl font-bold text-brand-danger mb-2">Error Loading Data</h3>
+        <p className="text-brand-text-secondary">{error}</p>
+      </Card>
+  );
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -79,6 +88,9 @@ const Sportsbook: React.FC = () => {
                 </div>
              </Card>
         )}
+        {events.length === 0 && !loading && (
+            <Card><p className="text-center text-brand-text-secondary">No sports events available at the moment.</p></Card>
+        )}
         {events.map((event) => (
           <Card key={event.id}>
             <div className="flex justify-between items-center mb-4">
@@ -92,7 +104,7 @@ const Sportsbook: React.FC = () => {
             {event.markets.map((market) => (
               <div key={market.name} className="mt-4">
                 <h4 className="font-semibold text-brand-text-secondary mb-2">{market.name}</h4>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {market.odds.map((outcome) => (
                     <button 
                       key={outcome.name} 
