@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 
 // The Supabase URL and Anon Key are now hardcoded with the values you provided.

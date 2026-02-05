@@ -48,9 +48,9 @@ const AdminPanel: React.FC = () => {
       if (type === 'withdraw' && selectedUser.balance < amount) {
         throw new Error("Withdrawal amount cannot exceed balance.");
       }
-      const newBalance = await api.updateUserBalance(selectedUser.id, amountToChange, type);
+      const newBalance = await api.updateUserBalance(selectedUser.id, amount, type);
       
-      auth?.updateBalance(selectedUser.id, newBalance);
+      // auth?.updateBalance(selectedUser.id, newBalance);
       setSelectedUser(prev => prev ? { ...prev, balance: newBalance } : null);
       setUsers(prevUsers => prevUsers.map(u => u.id === selectedUser.id ? {...u, balance: newBalance} : u));
       

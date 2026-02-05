@@ -5,7 +5,7 @@ Here is a recommended SQL schema for setting up your Supabase database for the G
 
 **IMPORTANT**: Before you begin, go to `Authentication -> Providers` and disable "Confirm email". This is necessary for the admin user creation feature to work from the client-side.
 
-You can run these commands in the Supabase SQL Editor.
+You can run these commands in the Supabase SQL Editor. It's recommended to use the `CLEAN_SUPABASE_SCHEMA.sql` file which includes a full reset.
 
 ### 1. `profiles` Table
 
@@ -26,6 +26,9 @@ create table profiles (
 alter table profiles enable row level security;
 
 -- Policies for profiles
+create policy "Users can insert their own profile." on profiles
+  for insert with check ( auth.uid() = id );
+
 create policy "Users can view their own profile." on profiles
   for select using ( auth.uid() = id );
 
@@ -51,6 +54,9 @@ create table accounts (
 alter table accounts enable row level security;
 
 -- Policies for accounts
+create policy "Users can insert their own account." on accounts
+  for insert with check ( auth.uid() = user_id );
+
 create policy "Users can view their own account." on accounts
   for select using ( auth.uid() = user_id );
 
@@ -120,18 +126,10 @@ create policy "Admins can view all bets." on bets
   for select using ( (select role from profiles where id = auth.uid()) = 'ADMIN' );
 ```
 
-### 5. Create Admin User (Manual Step)
+### 5. Admin User Setup
 
-After running the schema, you must create your first admin user.
-1. Go to `Authentication` and add a new user with your admin email and password.
-2. Go to the `SQL Editor` and run the following command, replacing the user's ID with the one you just created. You can find the ID in the `auth.users` table.
+The application now contains a self-healing mechanism that automatically creates the admin's profile and account upon the first successful login. You no longer need to run manual `INSERT` commands.
 
-```sql
--- Replace 'YOUR_ADMIN_AUTH_ID' with the actual ID of your admin user from the auth.users table.
--- You also need to create a corresponding account for the admin.
-insert into profiles (id, username, role)
-values ('YOUR_ADMIN_AUTH_ID', 'admin', 'ADMIN');
-
-insert into accounts (user_id, balance)
-values ('YOUR_ADMIN_AUTH_ID', 999999);
-```
+1.  Go to `Authentication` in your Supabase dashboard.
+2.  Add a new user with the email `admin@gobet.local` and your desired password.
+3.  That's it! Log in to the application with username `admin` and your password.

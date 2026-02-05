@@ -1,3 +1,4 @@
+
 // Fix for 'import.meta.env' TypeScript error
 
 import { supabase } from '../lib/supabaseClient';
